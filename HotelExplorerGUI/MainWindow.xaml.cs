@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data.Entity;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ using System.Windows.Shapes;
 using HotelDataCrawler.Model;
 using Newtonsoft.Json;
 using System.Threading;
+using HotelDatabase.Entities;
 
 namespace HotelExplorerGUI
 {
@@ -39,15 +41,54 @@ namespace HotelExplorerGUI
             Stopwatch sw = Stopwatch.StartNew();
             cancellationTokenSource = new CancellationTokenSource();
             SearchButton.Content = "Terminate";
-            HotelDataCrawler.HotelDataCrawler crawler = new HotelDataCrawler.HotelDataCrawler();
+            //
+            string hotelName = HotelNameTextBox.Text;
+            Hotel[] hotelEntities;
             HotelSearchResult hotelSearchResult = null;
-            try
+            using (HotelDBEntitiesConn context = new HotelDBEntitiesConn())
             {
-                hotelSearchResult = await crawler.SearchHotels(HotelNameTextBox.Text, cancellationTokenSource.Token);
+                hotelEntities = await context.Hotels.Where(x => x.Name == hotelName).ToArrayAsync(cancellationTokenSource.Token);
             }
-            catch (TaskCanceledException)
+            if (hotelEntities.Length > 0)
             {
-                // ignore
+                hotelSearchResult = new HotelSearchResult
+                {
+                    SearchName = hotelName
+                };
+                foreach (Hotel hotelEntity in hotelEntities)
+                {
+                    HotelData hotelData = JsonConvert.DeserializeObject<HotelData>(hotelEntity.Data);
+                    hotelSearchResult.Hotels.Add(hotelData);
+                }
+            }
+            else
+            {
+                HotelDataCrawler.HotelDataCrawler crawler = new HotelDataCrawler.HotelDataCrawler();
+                try
+                {
+                    hotelSearchResult = await crawler.SearchHotels(hotelName, cancellationTokenSource.Token);
+                    using (HotelDBEntitiesConn context = new HotelDBEntitiesConn())
+                    {
+                        foreach (HotelData hotelData in hotelSearchResult.Hotels)
+                        {
+                            Hotel hotelEntity = new Hotel
+                            {
+                                Name = (string)hotelData.GetParameterValue(HotelParameterType.Name),
+                                WebSite = (int)hotelData.WebSite,
+                                Data = JsonConvert.SerializeObject(hotelData, new JsonSerializerSettings
+                                {
+                                    NullValueHandling = NullValueHandling.Ignore
+                                })
+                            };
+                            context.Hotels.Add(hotelEntity);
+                        }
+                        await context.SaveChangesAsync(cancellationTokenSource.Token);
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    // ignore
+                }
             }
             StringBuilder sb = new StringBuilder();
             sb.Append(cancellationTokenSource.IsCancellationRequested ? "Terminated" : "Finished")

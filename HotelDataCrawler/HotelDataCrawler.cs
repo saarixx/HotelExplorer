@@ -86,7 +86,7 @@ namespace HotelDataCrawler
                     hotelData.AddParameter(HotelParameterType.Rating, rating);
                 }
                 //
-                HtmlNode reviewNode = node.QuerySelector(".catalogs-per a[href$='reviews']");
+                HtmlNode reviewNode = node.QuerySelector(".catalogs-per-a[href$=reviews/], .catalogs-per-a[href$=reviews]");
                 if (reviewNode != null)
                 {
                     string reviewStr = GetDecodedInnerText(reviewNode);
